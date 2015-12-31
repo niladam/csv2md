@@ -29,25 +29,37 @@ var parser = parse({
 });
 
 var transformer = transform(function(record, callback){
-  setTimeout(function() {
-    if (!csv2md.options.stream) {
-      csv2md.addRow(record);
-    } else {
-      // prepare for stdout
-      var s = csv2md.rowToString(record, isFirstLine);
-      if (isFirstLine) {
-        isFirstLine = false;
-      }
+  if (!csv2md.options.stream) {
+    csv2md.addRow(record);
+  } else {
+    // prepare for stdout
+    var s = csv2md.rowToString(record, isFirstLine);
+    if (isFirstLine) {
+      isFirstLine = false;
     }
-    callback(null, s);
-  }, 0);
+  }
+  callback(null, s);
 }, {parallel: 10});
 
 if (csv2md.options.stream) {
-  process.stdin.pipe(parser).pipe(transformer).pipe(process.stdout);
+  var streamOut = (argOptions['-o']) ? fs.createWriteStream(argOptions['-o']) : process.stdout;
+  var streamIn  = (argOptions['-i']) ? fs.createReadStream(argOptions['-i'])  : process.stdin;
+  streamIn.pipe(parser).pipe(transformer).pipe(streamOut);
 } else {
-  process.stdin.pipe(parser).pipe(transformer);
-  transformer.on('finish', function() {
-    console.log(csv2md.rowsToString());
-  });
+
+  var outputFile = function outputFile() {
+    if (argOptions['-o']) {
+      fs.writeFileSync(argOptions['-o'], csv2md.rowsToString());
+    } else {
+      process.stdout.write(csv2md.rowsToString());
+    }
+  }
+
+  if (argOptions['-i']) {
+    outputFile(parse(fs.writeFileSync(argOptions['-i'])));
+  } else {
+    process.stdin.pipe(parser).pipe(transformer);
+    transformer.on('finish', outputFile);
+  }
+
 }
